@@ -5,7 +5,7 @@ Author: Michael McCrea, 2020
 */
 (
 ~projectPath = PathName(
-	"/Users/dyne/Documents/Courses/CS-E4200 - Emergent User interfaces/"
+	"/Users/dyne/Documents/Courses/Emergent User interfaces/"
 );
 
 // load settings
@@ -21,7 +21,7 @@ this.executeFile((~projectPath +/+ "sc/run/propriosound_server.scd").fullPath);
 ~synthdefs.synthdefs.collect(_.name).postlns;
 
 
-/* RUNTIME */
+/* RUNTIME - STARTUP */
 
 (
 // GROUPS
@@ -58,7 +58,7 @@ fork {
 			} { // ~testfileIdxs is an array of indices into ~testBuffers[]
 				~testBuffers[~testfileIdxs]
 			};
-			("\tDEBUG : bufs %\n").postf(bufs);
+			// ("\tDEBUG : bufs %\n").postf(bufs);
 
 			~busses.add(
 				~inputBus = CtkAudio.play(bufs.size);
@@ -164,15 +164,66 @@ fork {
 		s.sync;
 
 		postStatus.if{ "[7] Synths playing".postln };
+		postStatus.if{ 0.3.wait; s.queryAllNodes };
+
 	} // end block
 } // end RUNTIME fork
 )
+
+/* RUNTIME - PROCESS */
+~inGrp.set(0.0, \amp, 0.2)     // set all in group
+~xfGrp.set(0.0, \amount, pi/2) // set all in group
+~xfGrp.set(0.0, \amount, pi/4) // set all in group
+
+// create dummy busses to simulate movement
+(
+~azOscL = CtkControl.lfo(LFNoise1, 0.3, -10.degrad, 180.degrad).play;
+~azOscR = CtkControl.lfo(LFNoise1, 0.3, -180.degrad, 10.degrad).play;
+~elOscL = CtkControl.lfo(LFNoise1, 0.3, -70.degrad, 80.degrad).play;
+~elOscR = CtkControl.lfo(LFNoise1, 0.3, -70.degrad, 80.degrad).play;
+)
+
+// assign control busses to az/el controls
+(
+~directorSynths[0].theta_(~azOscL).phi_(~elOscL);
+~directorSynths[1].theta_(~azOscR).phi_(~elOscR);
+)
+
+// visualize a bus
+ControlPlotter(~azOscL.bus, 1).start
+// get a bus value
+~azOscR.getSynchronous
+// scope a bus
+~azOscR.scope
+
+// change freq or range of ctl busses
+~azOscL.freq = 3.reciprocal
+~azOscR.freq = 3.reciprocal
+
+~azOscL.low = -10.degrad
+~azOscL.high = 160.degrad
+~azOscR.low = -160.degrad
+~azOscR.high = 10.degrad
+
+
+// encode input in specific directions
+~directorSynths[0].theta_(45.degrad).phi_(70.degrad)
+~directorSynths[1].theta_(-15.degrad).phi_(-45.degrad)
+
+
+~encoderSynths.do(_.pause)
+~encoderSynths.do(_.run)
+~rotatorSynths
+~directorSynths
+~decoderSynth
+
 
 /* CLEANUP */
 // To restart synths/processes
 (
 ~grps.do(_.free); ~grps = nil;		// synth groups
 ~busses.do(_.free); ~busses = nil;	// free busses
+[~azOscL, ~azOscR, ~elOscL, ~elOscR].do{ |me| me !? me.free }
 )
 
 // To restart config initialization
