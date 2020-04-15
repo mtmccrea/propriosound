@@ -47,8 +47,8 @@ s.waitForBoot({
 		/////// KERNEL ENCODERS
 
 		~encoderKernels !? { ~encoderKernels.do(_.free) };
-		~spreadKernel    = FoaEncoderKernel.newSpread(subjectID: 6,  kernelSize: 512);
-		~diffuseKernel   = FoaEncoderKernel.newDiffuse(subjectID: 5, kernelSize: 512);
+		~spreadKernel   = FoaEncoderKernel.newSpread(subjectID: 6,  kernelSize: 512);
+		~diffuseKernel  = FoaEncoderKernel.newDiffuse(subjectID: 5, kernelSize: 512);
 		~encoderKernels = [~spreadKernel, ~diffuseKernel];
 		s.sync;
 
@@ -64,8 +64,8 @@ s.waitForBoot({
 		s.sync;
 
 
-		/////// SYNTHDEFS
-
+		/////// SYNTHDEFS             /////////////////////////////
+		///////////////////////////////////////////////////////////
 		~synthdefs = CtkProtoNotes(
 
 			/* input */
@@ -160,15 +160,13 @@ s.waitForBoot({
 			// TODO: SynthDef.wrap these up
 			//		 \_inline versions with ReplaceOut
 
-			// NOTE: these use ReplaceOut
-
 			SynthDef(\dir_push, {
 				arg inbus, outbus = 0, amp = 1,
 					theta = 0.0, phi = 0.0, amount = (pi/4);
 				var foa;
 				foa = In.ar(inbus, 4); // FOA input
 				foa = FoaPush.ar(foa, amount, theta, phi, amp);
-				ReplaceOut.ar(outbus, foa)
+				Out.ar(outbus, foa)
 			}),
 
 			SynthDef(\dir_press, {
@@ -177,7 +175,7 @@ s.waitForBoot({
 				var foa;
 				foa = In.ar(inbus, 4); // FOA input
 				foa = FoaPress.ar(foa, amount, theta, phi, amp);
-				ReplaceOut.ar(outbus, foa)
+				Out.ar(outbus, foa)
 			}),
 
 			SynthDef(\dir_focus, {
@@ -186,9 +184,10 @@ s.waitForBoot({
 				var foa;
 				foa = In.ar(inbus, 4); // FOA input
 				foa = FoaFocus.ar(foa, amount, theta, phi, amp);
-				ReplaceOut.ar(outbus, foa)
+				Out.ar(outbus, foa)
 			}),
 
+			// NOTE: this uses ReplaceOut
 			SynthDef(\rtt_auto, {
 				arg inbus, outbus = 0, randPeriod = 3, randRange = 2pi;
 				var foa, freq;
