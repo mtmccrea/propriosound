@@ -37,7 +37,8 @@ MIDIdef.cc(\quat,
 /* UI Monitor */
 (
 // load utility functions (UI)
-var utilpath = "~/src/propriosound/sandbox/headtracker/utils.scd".standardizePath;
+
+var utilpath = "~/src/propriosound/sc/sandbox/utils.scd".standardizePath;
 this.executeFile(utilpath);
 
 ~rotaries = ~makeRotaries.(3);
