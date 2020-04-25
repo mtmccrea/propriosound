@@ -1,10 +1,14 @@
 %%
-% addpath('~/Documents/MATLAB/Quaternions')
+addpath('~/Documents/MATLAB/Quaternions')
 %%
 clear all;
 close all;
 % T = readtable('~/Desktop/sensor_basic_test.csv');
-T = readtable('~/Desktop/moveXYZ.csv');
+% T = readtable('~/Desktop/moveXYZ.csv');
+% T = readtable('~/Desktop/armwave.csv');
+% T = readtable('~/Desktop/lrfbud.csv');
+% T = readtable('~/Desktop/lrfbud2.csv');
+T = readtable('~/Desktop/rccwTiltRrccwFwUp.csv');
 % T = readtable('~/Desktop/slowRotate.csv');
 
 time   = (T{:,1}-T{1,1})/1000; % zero origin, ms -> s
@@ -29,9 +33,13 @@ plot(time, quat);
 legend(["q1", "q2", "q3", "q4"]);
 ylabel("Quat. Values");
 xlabel("Time [s]");
+%%
+% axisAngle2quatern([0 0 1], -pi/2)
+size(quatern2euler(quat_corr))
 
 %% Compute translational accelerations
 % using axis rotation of orientation quat
+close all; 
 
 % 1.0 *** Read in acceleration ***  
 acc_orig = accxyz; % default
@@ -51,26 +59,44 @@ quat_corr = quaternProd(            ... % quaternProd performs the rotation of t
     quat_orig                       ... % input quaternion (sensor orientation)
 );
 
-% 3.0 *** Take conjugate of corrected orientation to use as rotation transform
+% according to paper: phi=roll, theta=pitch, psi=yaw
+% See Eq.1 in "Adaptive Filter for a Miniature MEMS Based Attitude 
+% and Heading Reference System"
+orientation = quatern2euler(quat_corr);
+
 % 3.1 *** Rotate body accelerations to Earth frame ***
-% acc = quaternRotate(acc_local, quaternConj(quat_local)); % default
-% acc = quaternRotate(acc_corr, quaternConj(quat_corr));
+% 3.0 *** Take conjugate of corrected orientation to use as rotation transform
 acc = quaternRotate(acc_orig, quat_corr); % Janis's genius move
+acc = quaternRotate(acc, axisAngle2quatern([0 0 1], -pi/4)); % Janis's second genius move
 
 acc(:,3) = acc(:,3)+1; % add (?) gravity back to remove it
 
-figure()
+figure(5)
 plotaccel(time, accxyz, acc)
+ylim([-0.5 1])
+
+figure(666)
+set(gcf, 'Position', [641   389   640   316], 'NumberTitle', 'off', 'Name', 'Orientation');
+hold on;
+plot(orientation)
+colororder([1 0 0; 0 1 0; 0 0 1]); % r,g,b
+% according to paper: phi=roll, theta=pitch, psi=yaw
+legend('phi-roll-y', 'pitch-theta-x', 'psi-yaw-z');
+
+
+xlabel('Time (s)'); 
+ylabel('rad');
 
 % Find stationary moments
-moving = vecnorm(acc, 2, 2) > 0.2;
+moving = vecnorm(acc, 2, 2) > 0.15; % 0.2
 
-% figure()
-% plot(moving, 'o')
-% plot(vecnorm(acc, 2,2))
+figure(4)
+plot(moving, 'o'); hold on;
+plot(vecnorm(acc, 2,2));
+hold off;
 ylim([-0.05 1.05])
 
-%% Compute translational velocities
+% Compute translational velocities
 
 % acc(:,3) = acc(:,3) - 9.81;
 
@@ -106,19 +132,19 @@ clear v;
 % vel = vel - velDrift;
 
 % Plot translational velocity
-figure('Position', [9 39 900 300], 'NumberTitle', 'off', 'Name', 'Velocity');
+figure(1);
+set(gcf, 'Position', [641   389   640   316], 'NumberTitle', 'off', 'Name', 'Velocity');
 hold on;
 plot(time, vel);
 plot(time, vecnorm(vel, 2, 2), '--', 'LineWidth', 1.5);
 colororder([1 0 0; 0 1 0; 0 0 1; 0 0 0;]); % r,g,b,k
 legend('X', 'Y', 'Z', 'mag');
-
-title('Velocity');
 xlabel('Time (s)'); 
 ylabel('Velocity (m/s)');
 
 hold off;
 
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Compute translational position
 
 % Integrate velocity to yield position
@@ -127,10 +153,13 @@ for t = 2:length(pos)
     pos(t,:) = pos(t-1,:) + vel(t,:) * samplePeriod;    % integrate velocity to yield position
 end
 
-pos = pos* 981; % mike added: convert to cm
+pos = pos .* [1 1 -1]; % to try simple axis inversions, etc.
+pos = pos * 981; % mike added: convert to cm
 
 % Plot translational position
-figure('Position', [9 39 900 600], 'NumberTitle', 'off', 'Name', 'Position');
+
+figure(2)
+set(gcf, 'Position', [642     1   639   314], 'NumberTitle', 'off', 'Name', 'Position');
 hold on;
 plot(time, pos);
 colororder([1 0 0; 0 1 0; 0 0 1;]); % r,g,b
@@ -140,18 +169,22 @@ title('Position');
 xlabel('Time (s)');
 ylabel('Position (cm)');
 
-xlim([1 6])
+% xlim([1 6])
 hold off;
 
-%% 3D plot
-cols = genColors(0.0, 0.7, length(pos));
+% 3D plot
 
+figure(3)
+set(gcf, 'Position', [10    85   631   522], 'NumberTitle', 'off', 'Name', 'Position 3D');
+cols = genColors(0.0, 0.7, length(pos));
 scatter3(pos(:,1),pos(:,2),pos(:,3),[],cols, 'filled')
 xlabel('X')
 ylabel('Y')
 zlabel('Z')
 colororder(cols)
 clear cols
+
+placeFigures()
 %% Functions
 
 function qConj = quaternConj(q)
@@ -179,6 +212,23 @@ function q = axisAngle2quatern(axis, angle)
     q = [q0 q1 q2 q3];
 end
 
+function euler = quatern2euler(q)
+    % from paper: "Adaptive Filter for a Miniature MEMS Based Attitude and
+    % Heading Reference System" by Wang et al, IEEE.
+    
+    R(1,1,:) = 2.*q(:,1).^2-1+2.*q(:,2).^2;
+    R(2,1,:) = 2.*(q(:,2).*q(:,3)-q(:,1).*q(:,4));
+    R(3,1,:) = 2.*(q(:,2).*q(:,4)+q(:,1).*q(:,3));
+    R(3,2,:) = 2.*(q(:,3).*q(:,4)-q(:,1).*q(:,2));
+    R(3,3,:) = 2.*q(:,1).^2-1+2.*q(:,4).^2;    
+    
+    phi = atan2(R(3,2,:), R(3,3,:) );
+    theta = -atan(R(3,1,:) ./ sqrt(1-R(3,1,:).^2) );    
+    psi = atan2(R(2,1,:), R(1,1,:) );
+
+    euler = [phi(1,:)' theta(1,:)' psi(1,:)']; 
+end
+
 function Q_ENU = ned2enuQuat(Q_NED)
 
     Qw = Q_NED(1);
@@ -204,7 +254,7 @@ end
 function plotaccel(time, accxyz, acc)
     % Plot translational accelerations
     ylims = [-2 2.3];
-    figure()
+    
     subplot(2,1,1)
     hold on;
     plot(time, accxyz);

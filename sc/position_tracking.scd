@@ -1,12 +1,22 @@
-/*
-Algorithm ported from:
-https://github.com/xioTechnologies/Gait-Tracking-With-x-IMU
+/* RAZOR IMU - Serial
+*
+* Algorithm ported from:
+* https://github.com/xioTechnologies/Gait-Tracking-With-x-IMU
 */
 
+SerialPort.listDevices
+
+// a = ArduinoSMS("/dev/tty.usbmodem14201", 57600); // Razor_AHRS
+a = ArduinoSMS("/dev/tty.usbmodem14201", 9600); // Razor position firmware default
+a.close
+
+~moveThresh = 0.15;
+
+/* Helper Functions */
 (
-~quaternConj = {|q|
-	q * [1,-1,-1,-1]
-};
+var sqrt2_2 = sqrt(2)/2; // precompute
+
+~quaternConj = {|q| q * [1,-1,-1,-1] };
 
 ~quaternProd = {|a, b|
 	var ab = Array.newClear(4);
@@ -31,39 +41,56 @@ https://github.com/xioTechnologies/Gait-Tracking-With-x-IMU
 };
 
 ~quaternRotate = { |vec3, q|
-	var v0XYZ = ~quaternProd.(~quaternProd.(q, [0] ++ vec3), ~quaternConj.(q));
+	var v0XYZ = ~quaternProd.(
+		~quaternProd.(q, [0] ++ vec3),
+		~quaternConj.(q)
+	);
 	v0XYZ[1..3];
 };
 
-~calcPos = { |accXYZ, quat, pos = ([0,0,0]), vel = ([0,0,0]), timestep = 0.02|
-	var acc;
+// axis:  cartesian unit vector [X, Y, Z] for rotation axis
+// angle: rotation angle about axis
+~axisAngle2quatern = { |axis, angle|
+	var halfAngle = angle/2;
+	// return [q0, q1, q2, q3]
+	[cos(halfang)] ++ (axis * sin(halfAngle).neg);
+};
 
-	// TEST: see if accel is correct
-	accXYZ = [accXYZ[1], accXYZ[0], accXYZ[2].neg]; //  NED (Razor) -> ENU (x-IMU)
 
-	// ---- Compute translational accelerations	----
-	// Rotate body accelerations to Earth frame
-	acc = ~quaternRotate.(accXYZ, ~quaternConj.(quat));
-	// acc = accXYZ;
+~calcPos = { |acc_imu, quat_imu, pos = ([0,0,0]), vel_prev = ([0,0,0]), timestep = 0.02|
+	var acc_imu_enu, quat_imu_enu;
+	var acc_world, vel, pos, moving;
 
-	// % Remove gravity from measurements
-	// acc = acc - [0,0,1];    // % unnecessary due to velocity integral drift compensation
+	// *** Compute translational accelerations ***
 
-	// % Convert acceleration measurements to m/s/s
-	// acc = acc * 9.81;
+	// --- Convert sensor acceleration: NED (Razor) -> ENU (x-IMU/Gait tracker) ---
+	acc_imu_enu = [acc_imu[1], acc_imu[0], acc_imu[2].neg];
 
-	// % --------------------------------
-	// % Compute translational velocities
-	// acc[2] = acc[2] - 9.81;
+	// --- Convert sensor orientation: NED (Razor) -> ENU (x-IMU/Gait tracker) ---
+	quat_imu_enu = ~quaternProd(
+		~axisAngle2quatern.([sqrt2_2, sqrt2_2, 0], pi), // unit rotation vector: 45 degrees, 180 rotation
+		quat_imu                                        // input quaternion (sensor orientation)
+	);
 
-	// % Integrate acceleration to yield velocity
-	// vel = zeros(size(acc));
-	// vel = prev_vel + (accel*timestep)
-	vel = vel + (acc * timestep);
+	// --- Rotate body accelerations to Earth frame ---
+	acc_world = ~quaternRotate.(acc_imu_enu, ~quaternConj.(quat_imu_enu));
 
-	// if(stationary(t) == 1)
-	// vel(t,:) = [0 0 0];     % force zero velocity when foot stationary
-	// end
+	// --- Remove gravity from measurements    			// TODO check reasoning behind + rather than -
+	acc_world[2] = acc_world[2] + 1;       	   			// TODO unnecessary due to velocity integral drift compensation ?
+
+	// --- Detect movement from acceleration magnitude ---
+	// 													// TODO: this could move before the acceleration
+	// 													// coversions, but needs to handle gravity properly
+	moving = acc_imu.squared.sum.sqrt > ~moveThresh;  	// TODO: use a cheaper norm?
+
+	// --- Integrate twice to yield velocity ---
+	if (moving) {
+		vel = vel_prev + (acc_world * timestep); // Integrate acceleration to yield velocity
+		pos = pos_prev + (vel * timestep); 		 // Integrate velocity to yield position
+	} {
+		vel = [0, 0, 0]; // force zero velocity when foot stationary
+		pos = pos_prev;
+	}
 
 	// // % Compute integral drift during non-stationary periods
 	// velDrift = zeros(size(vel));
@@ -78,27 +105,96 @@ https://github.com/xioTechnologies/Gait-Tracking-With-x-IMU
 	// 	// % Remove integral drift
 	// 	vel = vel - velDrift;
 
-	// % -------------------------------------------------------------------------
-	// % Compute translational position: Integrate velocity to yield position
-	pos = pos + (vel * timestep);
-
-	[pos, vel, acc] // return
+	[pos, vel, acc_world] // return
 };
-~resetPos = true;
 
+~resetPos = true; // zero out position
 )
+
 ~scopes.do({|scp, i| scp.bounds_(-2,2) })
 ~scopes.do({|scp, i| scp.bounds_(\auto) })
 
-/* RAZOR IMU - Serial */
-// sloppy ATM...
+(
+/* Razor default "#TAQ=" Time, Acceleration, Quaternions */
+// p_ previous frame values
+var time_prev = 0, acc_prev = [0,0,0], quat_prev = [0,0,0];
+var pos_prev = [0,0,0], vel_prev = [0,0,0];
+var cnt = 1;
+var storeCnt = 1;
+var maxStoreFrames = 2000;
+var toSecs = 1000.reciprocal;
 
-SerialPort.listDevices
+~dataStore !? { ~dataStore = nil };
+~dataStore = [];
+~resetPos = true;
 
+a.action_({
+	|...args|
+	var data, time, acc_imu, quat_imu;
+	var pos, vel, accel_comp;
 
-// a = ArduinoSMS("/dev/tty.usbmodem14201", 57600); // Razor_AHRS
-a = ArduinoSMS("/dev/tty.usbmodem14201", 9600); // Razor position firmware default
-a.close
+	try{       												// TODO: DEBUG, remove try
+		// unpack data
+		// args: [ "#TAQ,time,acc1,acc2,acc3,quat1,quat2,quat3,quat4" ]
+		data = args[0].drop(6).split($,).asFloat; // drop "#TAQ="
+		time = data[0];
+		acc_imu  = data[1..3];
+		quat_imu = data[4..];
+
+		// store raw data for plotting/writing to file, etc.
+		if (storeCnt < maxStoreFrames) {
+			~dataStore = ~dataStore.add(data);              // TODO: DEBUG, remove data logging
+		};
+
+		#pos, vel, acc_world = ~calcPos.(
+			acc_imu, quat_imu, pos_prev, vel_prev,
+			(time - time_prev) * toSecs // sample period
+		);
+
+		// external reset control
+		if (~resetPos) {
+			pos_prev  = [0,0,0];
+			vel_prev  = [0,0,0];
+			~resetPos = false;
+		} {
+			pos_prev = pos;
+			vel_prev = vel;
+		};
+
+		// write to bus
+		~vBus !? {
+			~vBus.set(acc_world);        					// TODO: write position
+		};
+
+		// post every n iterations                   		// TODO: DEBUG, remove posting
+		cnt = cnt % 25; // post every 25 vals
+		if (cnt == 0) {
+			// accel_comp
+			acc_world
+			.round(0.001).collect({ |me| me.asString.padLeft(6) }).postln;
+		};
+
+		time_prev = time;
+		acc_prev  = acc;
+		quat_prev = quat;
+		cnt = cnt+1;
+		if (storeCnt < maxStoreFrames) {
+			storeCnt = storeCnt+1;
+		};
+	};
+
+})
+)
+a.action_({});         // disable serial responder
+~resetPos = true;
+~dataStore.size
+
+// write recorded data to .csv file
+(
+var data = ~dataStore.collect({|me| me[1..3] });
+data.shape;
+p= data.flop.plot
+)
 
 
 ~prev = Main.elapsedTime;
@@ -112,10 +208,12 @@ a.action_({|...args| args[0].postln })
 a.action_({})
 
 
+
 // write position to a bus
 s.boot;
 ~vBus = CtkControl(3).play;
-// ControlPlotter(~vBus.bus, 3).start; // 3-in-1 scope
+ControlPlotter(~vBus.bus, 3).start; // 3-in-1 scope
+
 
 // individual scopes
 (
@@ -134,109 +232,12 @@ s.boot;
 )
 ~vBus.set([1,2,3]/2)
 
-(  /* Razor default "#TAQ=" Time, Acceleration, Quaternions */
-// p_ previous frame values
-var p_time = 0, p_acc = [0,0,0], p_quat = [0,0,0];
-var p_pos = [0,0,0], p_vel = [0,0,0];
-var cnt = 0;
-var storeCnt = 1;
-var maxStoreFrames = 2000;
-var toSecs = 1000.reciprocal;
-~dataStore !? {~dataStore=nil};
-~dataStore = [];
-~resetPos = true;
-
-a.action_({|...args|
-	var data, time, acc, quat;
-	var pos, vel, accel_comp;
-
-	// args = [ "#TAQ,time,acc1,acc2,acc3,quat1,quat2,quat3,quat4" ]
-	try{ // TODO: remove try
-		data = args[0].drop(6).split($,).asFloat; // drop "#TAQ="
-		// unpack data
-		time = data[0];
-		acc  = data[1..3];
-		quat = data[4..];
-
-		// store raw data for plotting/writing to file, etc.
-		if (storeCnt < maxStoreFrames) {
-			~dataStore = ~dataStore.add(data);
-		};
-
-		// postf("%\n\tA: %\n\tQ: %\n", time, acc, quat);
-		// postf("fs = %\n", ((time-p_time) / 1000).reciprocal.round);
-		// time.postln;
-		// postf("\t%\n", p_time);
-
-		// if (~reset) {
-		// };
-
-		#pos, vel, accel_comp = ~calcPos.(acc, quat, p_pos, p_vel, time-p_time * toSecs);
 
 
-		if (~resetPos) {
-			p_pos = [0,0,0];
-			p_vel = [0,0,0];
-			~resetPos = false
-		} {
-			p_pos = pos;
-			p_vel = vel;
-		};
-
-		// vel.round(0.001).collect({|me|me.asString.padLeft(6)}).postln;
-		// ~vBus.set(vel.round(0.001));
-
-		// write to bus / plot
-		if (cnt % 25 == 0) {
-			// accel_comp.round(0.001).collect({|me|me.asString.padLeft(6)}).postln;
-			acc.round(0.001).collect({|me|me.asString.padLeft(6)}).postln;
-			cnt = 0;
-		};
-		~vBus.set(acc.round(0.001));
-		// ~vBus.set(accel_comp.round(0.001));
-
-		// ~time = time;
-		// ~acc = acc;
-		// ~quat = quat;
-		// ~p_time = p_time;
-		// ~p_acc = p_acc;
-		// ~p_quat = p_quat;
-
-		p_time = time;
-		p_acc  = acc;
-		p_quat = quat;
-		cnt = cnt+1;
-		if (storeCnt < maxStoreFrames) {
-			storeCnt = storeCnt+1;
-		};
-	};
-
-})
-)
-a.action_({})
-~resetPos = true;
-~dataStore.size
-a.action_({|msg|  })
-
-
-~dataStore.size
-
-~dataStore[0].size
-
-(
-var data = ~dataStore.collect({|me| me[1..3] });
-data.shape;
-p= data.flop.plot
-)
-
-
-~dataStore.shape
-
-csv
 
 (
 // write a test file:
-f = CSVFileWriter("~/Desktop/CSVReadTest.csv".standardizePath);
+f = CSVFileWriter("~/Desktop/rccwTiltRrccwFwUp.csv".standardizePath);
 ~dataStore.do(f.writeLine(_));
 // f.write(
 // 	"Some,comma,delimited,items, in line 1
@@ -254,20 +255,20 @@ p.minval_(-2).maxval_(2).refresh
 p.plots.do(_.plotBounds_(-2,2))
 p.plotBounds_(-2,2)
 p.bounds_(-2,2).refresh
-Plot
+
 
 Slop
 
 ~time
 ~acc
 ~quat
-~p_time
-~p_acc
-~p_quat
+~time_prev
+~acc_prev
+~quat_prev
 
 (
 var pos, vel;
-#pos, vel = ~calcPos.(~acc, ~quat, ~pos, ~vel, ~time-~p_time/1000);
+#pos, vel = ~calcPos.(~acc, ~quat, ~pos, ~vel, ~time-~time_prev/1000);
 ~pos = pos;
 ~vel = vel;
 )
