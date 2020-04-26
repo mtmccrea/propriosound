@@ -13,7 +13,7 @@
 ;
 
 // use soundfiles for test input?
-~useTestInput = false;
+~useTestInput = true;
 // choose which soundfiles to test with as input
 ~testfileIdxs = \rand; // [0,2]
 

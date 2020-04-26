@@ -24,6 +24,8 @@ SerialPort.closeAll
 ~moveThresh = 0.19;
 ~postAccMag = true;		// post acceleration magnitude to set ~moveThresh
 ~postAccMag = false;
+~postEvery = 25;		// post acceleration data every N messages
+~postMoveEvery = 3;		// post movement status every M messages
 
 /* quick resets */
 ~posListenerL.action_({|msg| msg.postln});
@@ -43,6 +45,8 @@ SerialPort.closeAll
 
 	~moveThresh = ~moveThresh ?? 0.15;    // ensure these vars are initialized
 	~postAccMag = ~postAccMag ?? false;
+	~postEvery = ~postEvery ?? 25;
+	~postMoveEvery = ~postMoveEvery ?? 3;
 
 	/* quaternion functions */
 	qConj = { |q| q * [1,-1,-1,-1] };
@@ -99,30 +103,31 @@ SerialPort.closeAll
 		acc_world[2] = acc_world[2] + 1;       	   			// TODO unnecessary due to velocity integral drift compensation ?
 
 		// --- Detect movement from acceleration magnitude ---
-		// 													// TODO: this could move before the acceleration
-		// 													// coversions, but needs to handle gravity properly
 		accmag = acc_world.squared.sum.sqrt; // TODO: use a cheaper norm? rm .sqrt
 		moving = accmag > ~moveThresh;
+		// 													// TODO: the threshold test could move before the acceleration
+		// 													// coversions, but needs to handle gravity properly
 
-		// --- Integrate twice to yield velocity ---
+		// --- Integrate twice to yield position ---
 		if (moving) {
 			vel = vel_prev + (acc_world * timestep); // integrate acceleration to yield velocity
 			pos = pos_prev + (vel * timestep); 		 // integrate velocity to yield position
 
-			if (~postAccMag) {
-				if ((moveCnt % 4) == 0) {1.post};
-			};
+			if (~postAccMag and: { (moveCnt % ~postMoveEvery) == 0 }, { 1.post });
 		} {
 			vel = [0, 0, 0]; // force zero velocity when foot stationary
 			pos = pos_prev;
 		};
 
-		if (moveCnt == 0) {"\n% %\n".postf( // post useful values
-			// acc_world, accmag
-			pos * 981, // conver to cm
-			accmag
-		)};
-		moveCnt =(moveCnt+1) % 30;
+		// post useful values
+		if (moveCnt == 0) {
+			"\n% %\n".postf(
+				// acc_world, accmag
+				pos * 981, // conver to cm
+				accmag
+			)
+		};
+		moveCnt = (moveCnt + 1) % ~postEvery;
 
 		// // % Compute integral drift during non-stationary periods
 		// velDrift = zeros(size(vel));
@@ -139,7 +144,6 @@ SerialPort.closeAll
 
 		[pos, vel, acc_world]	// return
 	};
-
 
 	// id: L = 0, R = 1
 	~genListenerFunc = { |id|
@@ -182,7 +186,9 @@ SerialPort.closeAll
 							vel_prev = vel;
 						};
 						// write to bus
-						~posBusL !? { ~posBusL.set(pos_prev) }
+						~posBusL !? {
+							~posBusL.set(pos_prev * 981) // convert to cm
+						}
 					},
 					1, {
 						if (~resetPosR) {
@@ -194,7 +200,9 @@ SerialPort.closeAll
 							vel_prev = vel;
 						};
 						// write to bus
-						~posBusR !? { ~posBusR.set(pos_prev) }
+						~posBusR !? {
+							~posBusR.set(pos_prev * 981) // convert to cm
+						}
 					}
 				);
 				time_prev = time;

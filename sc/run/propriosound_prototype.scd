@@ -215,7 +215,7 @@ fork {
 		).do(_.play);
 		s.sync;
 
-		logProgress.("Synths playing") };
+		logProgress.("Synths playing");
 		~postStatus.if{ fork{ 0.3.wait; s.queryAllNodes } };
 
 	} // end block
@@ -226,6 +226,18 @@ fork {
 ~inGrp.set(0.0, \amp, 0.2)     // set all in group
 ~xfGrp.set(0.0, \amount, pi/2) // set all in group
 ~xfGrp.set(0.0, \amount, pi/4) // set all in group
+
+~encoderSynths[0].run
+~encoderSynths[0].pause
+~encoderSynths[1].run
+~encoderSynths[1].pause
+
+~directorSynths[0].theta_(~dirBussesL[0]).phi_(~dirBussesL[1]).rho_(~dirBussesL[2]);
+~directorSynths[0].theta_(~dirBussesL[0]).phi_(~dirBussesL[1]);
+~directorSynths[0].theta_(45.degrad).phi_(~dirBussesL[1]);
+~directorSynths[0].theta_(~dirBussesL[0]).phi_(0.degrad);
+// ~directorSynths[0].theta_(15.degrad).phi_(-10.degrad);
+
 
 // create dummy busses to simulate movement
 (
@@ -241,9 +253,9 @@ fork {
 ~directorSynths[1].theta_(~azOscR).phi_(~elOscR);
 )
 ( // actual direction busses
-// ~dirBussesL/R rho, theta, phi
-~directorSynths[0].rho_(~dirBussesL[0]).theta_(~dirBussesL[1]).phi_(~dirBussesL[2]);
-~directorSynths[1].rho_(~dirBussesR[0]).theta_(~dirBussesR[1]).phi_(~dirBussesR[2]);
+// ~dirBussesL/R theta, phi, rho
+~directorSynths[0].theta_(~dirBussesL[0]).phi_(~dirBussesL[1]).rho_(~dirBussesL[2]);
+~directorSynths[1].theta_(~dirBussesR[0]).phi_(~dirBussesR[1]).rho_(~dirBussesR[2]);
 )
 
 // visualize
@@ -261,9 +273,9 @@ ControlPlotter(~dirBusL.bus, 3).start
 ControlPlotter(~dirBusR.bus, 3).start
 
 // get a bus value
-~dirBussesL[0].getSynchronous; // L hand dir, rho
-~dirBussesL[1].getSynchronous; // L hand dir, theta
-~dirBussesL[2].getSynchronous; // L hand dir, phi
+~dirBussesL[0].getSynchronous; // L hand dir, theta
+~dirBussesL[1].getSynchronous; // L hand dir, phi
+~dirBussesL[2].getSynchronous; // L hand dir, rho
 
 // scope a bus
 ~azOscR.scope

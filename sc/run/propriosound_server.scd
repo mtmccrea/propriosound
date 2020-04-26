@@ -248,11 +248,11 @@ s.waitForBoot({
 				cartesianSq = cartesian.squared;
 
 				// to spherical
-				rho = cartesianSq.sum.sqrt;
 				theta = atan2(y, x);
 				phi = atan2(z, cartesianSq[0..1].sum.sqrt);
+				rho = cartesianSq.sum.sqrt;
 
-				Out.kr(outbus, [rho, theta, phi])
+				Out.kr(outbus, [theta, phi, rho])
 			}),
 
 			// capture and filter head orientation
