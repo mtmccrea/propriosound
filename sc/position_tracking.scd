@@ -162,6 +162,7 @@ a.action_({
 		};
 
 		// write to bus
+		~posBusL !? { ~posBusL.set(pos_prev) };
 		~vBus !? {
 			~vBus.set(acc_world);        					// TODO: write position
 		};

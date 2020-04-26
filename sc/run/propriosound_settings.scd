@@ -5,7 +5,7 @@ Author: Michael McCrea, 2020
 */
 
 /* ~~~~~~~~~~~~~ */
-/* USER SETTINGS */
+// USER SETTINGS
 
 ~binDecoder = IdentityDictionary(know:true)
 .put(\which, \cipic) // \cpic, \listen, or \spherical (no elevation)
@@ -13,7 +13,7 @@ Author: Michael McCrea, 2020
 ;
 
 // use soundfiles for test input?
-~useTestInput = true;
+~useTestInput = false;
 // choose which soundfiles to test with as input
 ~testfileIdxs = \rand; // [0,2]
 
@@ -22,8 +22,12 @@ Author: Michael McCrea, 2020
 
 // foa direct type
 ~directorType = \press; // push, press, focus
-/* END USER SETTINGS */
-/* ~~~~~~~~~~~~~~~~~ */
+
+// post initialization status?
+~postStatus = true;
+
+// ...END USER SETTINGS
+/* ~~~~~~~~~~~~~~~~~~~~ */
 
 /* ~~~~~~~~~~~~~ */
 /* CONFIGURATION */

@@ -162,7 +162,8 @@ s.waitForBoot({
 
 			SynthDef(\dir_push, {
 				arg inbus, outbus = 0, amp = 1,
-					theta = 0.0, phi = 0.0, amount = (pi/4);
+					theta = 0.0, phi = 0.0, amount = (pi/4),
+					rho; // unused
 				var foa;
 				foa = In.ar(inbus, 4); // FOA input
 				foa = FoaPush.ar(foa, amount, theta, phi, amp);
@@ -171,7 +172,8 @@ s.waitForBoot({
 
 			SynthDef(\dir_press, {
 				arg inbus, outbus = 0, amp = 1,
-					theta = 0.0, phi = 0.0, amount = (pi/4);
+					theta = 0.0, phi = 0.0, amount = (pi/4),
+					rho; // unused
 				var foa;
 				foa = In.ar(inbus, 4); // FOA input
 				foa = FoaPress.ar(foa, amount, theta, phi, amp);
@@ -180,7 +182,8 @@ s.waitForBoot({
 
 			SynthDef(\dir_focus, {
 				arg inbus, outbus = 0, amp = 1,
-					theta = 0.0, phi = 0.0, amount = (pi/4);
+					theta = 0.0, phi = 0.0, amount = (pi/4),
+					rho; // unused
 				var foa;
 				foa = In.ar(inbus, 4); // FOA input
 				foa = FoaFocus.ar(foa, amount, theta, phi, amp);
@@ -201,6 +204,25 @@ s.waitForBoot({
 				ReplaceOut.ar(outbus, foa)
 			}),
 
+			// Head rotation compensation
+			// NOTE: this uses ReplaceOut
+			SynthDef(\head_comp, {
+				arg inoutbus, headbus;
+				var foa, look, yaw, pitch, roll;
+				foa = In.ar(inoutbus, 4); // FOA input
+				// head look direction
+				look = In.kr(headbus, 3); // head's yaw, pitch, roll
+				#yaw, pitch, roll = look;
+				// TODO: this may need to be individual UGens to get order correct
+				foa = FoaRTT.ar(foa,
+					yaw.neg,
+					pitch.neg,
+					roll.neg,
+				);
+				// overwrites input bus
+				ReplaceOut.ar(inoutbus, foa)
+			}),
+
 			/* Decoder */
 
 			SynthDef(\decoder, { arg inbus, outbus = 0, amp = 1;
@@ -210,6 +232,37 @@ s.waitForBoot({
 					foa, ~decoderKernel, mul: amp // see ~binDecoder in settings
 				);
 				Out.ar(outbus, decode)
+			}),
+
+
+			/* Control signal processing (position, orientation) */
+
+			// translate cartesian hand positions to encoding directions
+			SynthDef(\pos2dir, { arg inbus, outbus = 0;
+				var x, y, z, xsq, ysq, zsq, rho, theta, phi;
+				var cartesian, cartesianSq;
+
+				// cartesian in
+				cartesian = In.kr(inbus, 3);
+				#x, y, z = cartesian;
+				cartesianSq = cartesian.squared;
+
+				// to spherical
+				rho = cartesianSq.sum.sqrt;
+				theta = atan2(y, x);
+				phi = atan2(z, cartesianSq[0..1].sum.sqrt);
+
+				Out.kr(outbus, [rho, theta, phi])
+			}),
+
+			// capture and filter head orientation
+			SynthDef(\heading, { arg inoutbus;
+				var headbus = In.kr(inoutbus, 3);
+
+				// add filtering if needed...
+
+				// overwrite input bus
+				Out.kr(inoutbus, headbus)
 			}),
 		);
 		s.sync;
