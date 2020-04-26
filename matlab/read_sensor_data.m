@@ -3,13 +3,15 @@ addpath('~/Documents/MATLAB/Quaternions')
 %%
 clear all;
 close all;
-% T = readtable('~/Desktop/sensor_basic_test.csv');
-% T = readtable('~/Desktop/moveXYZ.csv');
-% T = readtable('~/Desktop/armwave.csv');
-% T = readtable('~/Desktop/lrfbud.csv');
-% T = readtable('~/Desktop/lrfbud2.csv');
-T = readtable('~/Desktop/rccwTiltRrccwFwUp.csv');
-% T = readtable('~/Desktop/slowRotate.csv');
+mocapdir = '~/src/propriosound/mocap/';
+% T = readtable([mocapdir 'sensor_basic_test.csv']);
+% T = readtable([mocapdir 'moveXYZ.csv']);
+T = readtable([mocapdir 'test.csv']);
+% T = readtable([mocapdir 'armwave.csv']);
+% T = readtable([mocapdir 'lrfbud.csv']);
+% T = readtable([mocapdir 'lrfbud2.csv']);
+% T = readtable([mocapdir 'rccwTiltRrccwFwUp.csv']);
+% T = readtable([mocapdir 'slowRotate.csv']);
 
 time   = (T{:,1}-T{1,1})/1000; % zero origin, ms -> s
 accxyz = T{:,2:4};             % acceleration of x,y,z axes of sensor
@@ -17,8 +19,17 @@ quat   = T{:,5:end};           % quaternion orientation sensor
 
 samplePeriod = mean(diff(time)); % average time between measurements
 
-clear T
+clear T mocapdir
 
+%%
+tidx = 2;
+tacc = accxyz(tidx, :)
+tquat = quat(tidx, :)
+
+quaternProduct = quaternProd(            ... % quaternProd performs the rotation of the orientation quaternion
+    axisAngle2quatern([sqrt(2)/2 sqrt(2) 0.3], pi/7), ... % rotation vector at 45 degrees
+    tquat                       ... % input quaternion (sensor orientation)
+)
 %% Inspect time between samples
 plot(diff(time))
 
@@ -45,9 +56,7 @@ close all;
 acc_orig = accxyz; % default
 
 % 1.1 *** Convert sensor accel NED -> ENU
-% acc_corr = acc_orig;
-acc_corr  = [acc_orig(:,2) acc_orig(:,1) -acc_orig(:,3)]; % NED (Razor) -> ENU (x-IMU)
-% acc_corr  = [acc_orig(:,1) acc_orig(:,2) acc_orig(:,3)];
+% acc_corr  = [acc_orig(:,2) acc_orig(:,1) -acc_orig(:,3)]; % NED (Razor) -> ENU (x-IMU)
 
 % 2.0 *** Read in quaternion ***
 quat_orig = quat;  % default
@@ -66,7 +75,8 @@ orientation = quatern2euler(quat_corr);
 
 % 3.1 *** Rotate body accelerations to Earth frame ***
 % 3.0 *** Take conjugate of corrected orientation to use as rotation transform
-acc = quaternRotate(acc_orig, quat_corr); % Janis's genius move
+acc = quaternRotate(acc_orig, quat_corr); % Janis's genius move NOTE ACC_ORIG
+% acc = quaternRotate(acc_corr, quat_corr);
 acc = quaternRotate(acc, axisAngle2quatern([0 0 1], -pi/4)); % Janis's second genius move
 
 acc(:,3) = acc(:,3)+1; % add (?) gravity back to remove it
@@ -184,7 +194,8 @@ zlabel('Z')
 colororder(cols)
 clear cols
 
-placeFigures()
+% placeFigures()
+
 %% Functions
 
 function qConj = quaternConj(q)
