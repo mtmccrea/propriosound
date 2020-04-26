@@ -1,3 +1,8 @@
+/* Plotting positions in 3D
+*
+* Author: Michael McCrea, 2020
+*/
+
 (
 ~pv = PointView().front;
 {

@@ -1,7 +1,7 @@
 /*
-Settings for propriosound.
-
-Author: Michael McCrea, 2020
+* Settings for propriosound.
+*
+* Author: Michael McCrea, 2020
 */
 
 /* ~~~~~~~~~~~~~ */

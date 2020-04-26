@@ -1,9 +1,9 @@
 /*
-SynthDefs for propriosound.
-
-Load this file and access through the ~synthdefs variable.
-
-Author: Michael McCrea, 2020
+* SynthDefs for propriosound.
+*
+* Load this file and access through the ~synthdefs variable.
+*
+* Author: Michael McCrea, 2020
 */
 
 /*

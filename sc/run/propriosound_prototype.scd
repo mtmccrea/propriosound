@@ -1,7 +1,7 @@
 /*
-Main process for propriosound.
-
-Author: Michael McCrea, 2020
+* Main process for propriosound.
+*
+* Author: Michael McCrea, 2020
 */
 (
 ~projectPath = PathName(
