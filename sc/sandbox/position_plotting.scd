@@ -4,6 +4,7 @@
 */
 
 (
+~historyLength = 10;
 ~pv = PointView();
 {
 	~pv.axisScale = 1;
@@ -17,12 +18,18 @@
 		-1, -1, -1,
 		-1, -1, 1,
 	].clump(3).collect(_.asCartesian);
-	~pv.points_(
-		~cube ++ 2.collect{ [0,0,0].asCartesian }, // add 2 default hand positions
+	~pv.points_(~cube
+		++ (4.collect{ [0,0,0].asCartesian } ! ~historyLength).flat, // add 4 default hand positions (real, clipped)
 		resetConnections: false
 	);
 	// cube vertices are clear
-	~pv.pointColors = (Color.clear!8) ++ [Color.blue, Color.red];
+	~pv.pointColors = (Color.clear!8)
+	++ (
+		[
+		Color.blue, Color.red,
+		Color.blue.alpha_(0.2), Color.red.alpha_(0.2)
+	] ! ~historyLength
+	).flop.flat;
 	~pv.showIndices = false;
 	// outline the bounding cube
 	~pv.connections_([
@@ -32,35 +39,65 @@
 	~pv.front
 }.defer(0.3);
 
-
-// highlight hand positions
-// { ~pv.highlightPoints((~cube.size..~pv.points.size-1)) }.defer(0.5)
-
 ) // END load PointView
 
 // Update hand positions in PointView
 (
 ~rate = 10;
-f = fork({
+~updateVis !? {~updateVis.stop};
+~updateVis = fork({
+	var pospnts = [0,0,0].asCartesian ! ~historyLength ! 2;
+	var clippospnts = [0,0,0].asCartesian ! ~historyLength ! 2;
+	var thPhRh, cart;
+	var maxCm = 90; // max centimeter distance to normalize display
+	var norm = maxCm.reciprocal;
+	var wrPos = 0;
 	1000.do {
-		var pnts = [];
-		[~posBusL, ~posBusR].do{ |bus|
+		// collect position points
+		[~posBusL, ~posBusR].do{ |bus, i|
 			bus !? {
-				pnts = pnts.add(
-					3.collect({ |i|
-						bus.getSynchronous(i) / 90 // normalize to 90cm radius
-					}).asCartesian;
-				)
+				pospnts[i][wrPos] = 3.collect({ |j|
+					bus.getSynchronous(j) * norm // normalize to maxCm radius
+				}).asCartesian;
 			}
 		};
+		// collect (filtered) direction points
+		[~dirBusL, ~dirBusR].do{ |bus, i|
+			bus !? {
+				thPhRh = 3.collect({ |j|
+					bus.getSynchronous(j) // radians
+				});
+				cart = Spherical(
+				thPhRh[2] * norm, thPhRh[0], thPhRh[1]).asCartesian;
+				clippospnts[i][wrPos] = cart;
+			}
+		};
+
 		// update pointview
-		~pv.points_(~cube ++ pnts, resetConnections: false);
+		~pv.points_(~cube ++ pospnts.flat ++ clippospnts.flat,
+			resetConnections: false);
 		~rate.reciprocal.wait;
+		wrPos = (wrPos+1) % ~historyLength;
 	}
 }, AppClock);
 )
 
-f.stop // stop updating
+~positionSynths[0].clipLoTheta_(20.degrad).clipHiTheta_(25.degrad)
+~positionSynths[1].clipLoTheta_(-25.degrad).clipHiTheta_(20.degrad)
+~positionSynths[0..1].do({|synth| synth.clipLoPhi_(-45.degrad).clipHiPhi_(45.degrad) })
+
+( // update colors
+~pv.pointColors = (Color.clear!8)
+++ (
+	[
+		Color.blue, Color.red,
+		Color.blue.alpha_(0.2), Color.red.alpha_(0.2)
+	] ! ~historyLength
+).flop.flat;
+)
+
+~updateVis.stop // stop updating
+
 
 // dummy busses to test with
 (
@@ -69,7 +106,11 @@ s.waitForBoot({
 	~posBusL !? { ~posBusL.free };
 	~posBusL = CtkControl(3).play; // for allocating the consecutive busses
 	~posBusR !? { ~posBusR.free };
-	~posBusR = CtkControl(3).play; // for allocating the consecutive busses
+	~posBusR = CtkControl(3).play;
+	~dirBusL !? { ~dirBusL.free };
+	~dirBusL = CtkControl(3).play;
+	~dirBusR !? { ~dirBusR.free };
+	~dirBusR = CtkControl(3).play;
 	s.sync;
 });
 )
@@ -102,6 +143,7 @@ s.waitForBoot({
 	};
 });
 )
+
 ControlPlotter(~posBusL.bus, 3).start; // 3-in-1 scope
 ControlPlotter(~posBusR.bus, 3).start; // 3-in-1 scope
 
