@@ -88,8 +88,8 @@ s.waitForBoot({
 			// NOTE: uses ReplaceOut
 			SynthDef(\compander, {
 				arg inbus = 0, outbus = 0,
-				threshdb = -6, slopeBelow = 1.0, slopeAbove = 1.0,
-				clampTime = 0.002, releaseTime = 0.1, amp = 1.0;
+					threshdb = -6, slopeBelow = 1.0, slopeAbove = 1.0,
+					clampTime = 0.002, releaseTime = 0.1, amp = 1.0;
 				var sig, comp;
 
 				sig = In.ar(inbus);
@@ -109,8 +109,8 @@ s.waitForBoot({
 			// NOTE: uses ReplaceOut
 			SynthDef(\gate, {
 				arg inbus = 0, outbus = 0,
-				threshdb = -6, slopeBelow = 1.0, slopeAbove = 1.0,
-				clampTime = 0.002, releaseTime = 0.1, amp = 1.0;
+					threshdb = -6, slopeBelow = 1.0, slopeAbove = 1.0,
+					clampTime = 0.002, releaseTime = 0.1, amp = 1.0;
 				var sig, comp;
 
 				sig = In.ar(inbus);
@@ -125,6 +125,24 @@ s.waitForBoot({
 					mul:		amp
 				);
 				ReplaceOut.ar(outbus, comp)
+			}),
+
+			SynthDef(\resonance, {
+				arg inoutbus, mix = 0.5, lagtime = 1.8,
+					freqs (#[300, 600, 900, 1200]),
+					amps (#[1, 0.3, 0.2, 0.05]),
+					rings (#[1, 1, 1, 2]);
+				var in, reson, pwrmix;
+				in = In.ar(inoutbus, 1);
+				// in = LPF.ar(Crackle.ar( MouseX.kr(1,2), 0.001 ), 1800);
+				reson = DynKlank.ar(
+					`[Lag.kr(freqs, lagtime), Lag.kr(amps, lagtime), rings], in
+				);
+				pwrmix = mix*2-1; // map (0,1) > (-1,1)
+				ReplaceOut.ar(inoutbus,
+					(reson * ((1+pwrmix)*0.5).sqrt)  // wet
+					+  (in * ((1-pwrmix)*0.5).sqrt)  // dry
+				);
 			}),
 
 			/* Encoders */
@@ -214,31 +232,54 @@ s.waitForBoot({
 				look = In.kr(headbus, 3); // head's yaw, pitch, roll
 				#yaw, pitch, roll = look;
 				// TODO: this may need to be individual UGens to get order correct
-				foa = FoaRTT.ar(foa,
-					yaw.neg,
-					pitch.neg,
-					roll.neg,
-				);
+				foa = FoaTumble.ar(foa, pitch.neg);
+				foa = FoaTilt.ar(foa, roll.neg);
+				foa = FoaRotate.ar(foa, yaw.neg);
 				// overwrites input bus
+				ReplaceOut.ar(inoutbus, foa)
+			}),
+
+			//
+			SynthDef(\reverb, {
+				arg inoutbus = 0, mix = 0.25, predelay = 0.05,
+					cutoff = 3000, t60low = 2.2, t60high = 1.5,
+					diffusion = 1.0, diffusionLR = 1.0, diffusionFB = 1.0,
+					mod = 1.0;
+				var foa;
+				foa = In.ar(inoutbus, 4); // FOA input
+				foa = BFormatReverb.ar(foa,
+					mix: mix,
+					predelay: predelay,
+					cutoff: cutoff,
+					t60low: t60low,
+					t60high: t60high,
+					diffusion: diffusion,
+					diffusionLR: diffusionLR,
+					diffusionFB: diffusionFB,
+					mod: mod,
+				);
 				ReplaceOut.ar(inoutbus, foa)
 			}),
 
 			/* Decoder */
 
-			SynthDef(\decoder, { arg inbus, outbus = 0, amp = 1;
+			SynthDef(\decoder, { arg inbus, outbus = 0, amp = 1, limit = 0.85;
 				var foa, decode;
 				foa = In.ar(inbus, 4); // FOA input
 				decode = FoaDecode.ar(
 					foa, ~decoderKernel, mul: amp // see ~binDecoder in settings
 				);
-				Out.ar(outbus, decode)
+				Out.ar(outbus, Limiter.ar(decode, limit))
 			}),
 
 
 			/* Control signal processing (position, orientation) */
 
 			// translate cartesian hand positions to encoding directions
-			SynthDef(\pos2dir, { arg inbus, outbus = 0;
+			SynthDef(\pos2dir, {
+				arg inbus, outbus = 0,
+				    clipLoTheta=(-15.degrad), clipHiTheta=(100.degrad),
+					clipLoPhi=(-75.degrad), clipHiPhi=(75.degrad);
 				var x, y, z, xsq, ysq, zsq, rho, theta, phi;
 				var cartesian, cartesianSq;
 
@@ -248,8 +289,8 @@ s.waitForBoot({
 				cartesianSq = cartesian.squared;
 
 				// to spherical
-				theta = atan2(y, x);
-				phi = atan2(z, cartesianSq[0..1].sum.sqrt);
+				theta = atan2(y, x).clip(clipLoTheta, clipHiTheta);
+				phi = atan2(z, cartesianSq[0..1].sum.sqrt).clip(clipLoPhi, clipHiPhi);
 				rho = cartesianSq.sum.sqrt;
 
 				Out.kr(outbus, [theta, phi, rho])

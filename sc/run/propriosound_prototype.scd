@@ -30,6 +30,7 @@ fork {
 		var whichEncoder, whichDirector;
 		var stepcnt = 0; // loading status vars
 		var logProgress;
+		var dirclipTheta;
 
 		logProgress = { |str|
 			~postStatus.if{ "[%] %\n".postf(stepcnt = stepcnt+1, str) };
@@ -70,6 +71,13 @@ fork {
 			~busses.add(bus);
 			bus; // return
 		};
+		s.sync;
+
+		// Set up a decoder bus
+		~decBus !? { ~decBus.free };
+		~busses.add(
+			~decBus = CtkAudio.play(4)
+		);
 		s.sync;
 
 		// Choose input: test or hardware input
@@ -113,6 +121,22 @@ fork {
 		};
 		logProgress.("Input synths created");
 
+
+		// ~~~ RESONATOR SYNTHS ~~~
+		// ~~~~~~~~~~~~~~~~~~~~~~~~
+
+		~resonSynths = ~inSynths.collect{ |inSynth, i|
+			~synthdefs[\resonance].note(addAction: \tail, target: ~inGrp)
+			.inoutbus_(inSynth.outbus) // Uses ReplaceOut
+			.mix_(0.3)
+			.freqs_([300, 600, 900, 1200])
+			.amps_([ 0.0164, 0.0112, 0.0152, 0.0158])
+			.rings_([1, 2, 1, 1.2])
+			.lagtime_(1.3)
+			;
+		};
+		logProgress.("Input processing synths created");
+
 		// ~~~ ENCODER SYNTHS & BUSSES ~~~
 		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -137,19 +161,23 @@ fork {
 		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 		// position to direction control bus encoders
+		dirclipTheta = [[-15, 85], [-85, 15]].degrad; // [[leftLo, leftHi], [rightLo, rightHi]]
 		~positionSynths = [
 			[~posBusL, ~dirBusL],
 			[~posBusR, ~dirBusR]
 		].collect{ |posdirbuspair, i|
+			var clipLo, clipHi;
+			#clipLo, clipHi = dirclipTheta[i];
 			~synthdefs[\pos2dir].note(addAction: \tail, target: ~inGrp)
-			.inbus_(posdirbuspair[0])   // position bus
-			.outbus_(posdirbuspair[1]); // direction bus
+			.inbus_(posdirbuspair[0])   				// position bus
+			.outbus_(posdirbuspair[1]) 					// direction bus
+			.clipLoTheta_(clipLo).clipHiTheta_(clipHi)
+			.clipLoPhi_(-45.degrad).clipHiPhi_(45.degrad)
 		};
 		// head orientation filtering synth
-		~positionSynths = ~positionSynths.add(
-			~synthdefs[\heading].note(addAction: \tail, target: ~inGrp)
-			.inoutbus_(~headBus); // reads/writes to same bus
-		);
+		~headingSynth =~synthdefs[\heading].note(addAction: \tail, target: ~inGrp)
+		.inoutbus_(~headBus); // reads/writes to same bus
+
 		logProgress.("Position control bus synths created");
 
 		// ~~~ ROTATOR & DIRECTOR SYNTHS ~~~
@@ -179,19 +207,26 @@ fork {
 		};
 		logProgress.("Director synths created");
 
-		// ~~~ DECODER SYNTH & BUSSES ~~~
+
+		// ~~~ REVERB, DECODER SYNTH & BUSSES ~~~
 		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-		~decBus !? { ~decBus.free };
-		~busses.add(
-			~decBus = CtkAudio.play(4)
-		);
-		s.sync;
+		~reverbSynth = ~synthdefs[\reverb].note(addAction: \tail, target: ~xfGrp)
+		.inoutbus_(~decBus)   // uses ReplaceOut
+		.mix_(0.4)
+		.predelay_(0.1).cutoff_(800)
+		.t60low_(1.0).t60high_(0.8)
+		.diffusion_(0.707).diffusionLR_(0.5).diffusionFB_(0.7)
+		.mod_(0.3)
+		;
+		logProgress.("reverb synth created");
 
 		~decoderSynth = ~synthdefs[\decoder].note(addAction: \tail, target: ~decGrp)
 		.inbus_(~decBus)
 		.outbus_(~hwOutChan)
-		.amp_(1.0);
+		.limit_(-1.5.dbamp) // limiter
+		.amp_(1.0)
+		;
 		logProgress.("Decoder synth created");
 
 		// ~~~ HEAD COMPENSATION SYNTH ~~~
@@ -199,7 +234,8 @@ fork {
 
 		~headCompSynth = ~synthdefs[\head_comp].note(addAction: \head, target: ~decGrp)
 		.inoutbus_(~decBus)  // read/write to same FOA bus
-		.headbus_(~headBus); // yaw, pitch, roll of head orientation
+		.headbus_(~headBus)  // yaw, pitch, roll of head orientation
+		;
 		logProgress.("Head compensation synth created");
 
 		// ~~~ PLAY ~~~
@@ -207,12 +243,15 @@ fork {
 		(
 			~inSynths ++
 			~positionSynths ++
+			~headingSynth ++
 			~encoderSynths ++
+			~resonSynths ++
 			~rotatorSynths ++
 			~directorSynths ++
+			~reverbSynth ++
 			~headCompSynth ++
 			~decoderSynth
-		).do(_.play);
+		).do({ |synth| synth.play; s.sync; });
 		s.sync;
 
 		logProgress.("Synths playing");
@@ -223,10 +262,17 @@ fork {
 )
 
 /* RUNTIME - PROCESS */
+
+/* master output */
+~decoderSynth.amp_(-6.dbamp)
+~decoderSynth.limit_(-1.5.dbamp) // limiter
+
+/* groups */
 ~inGrp.set(0.0, \amp, 0.2)     // set all in group
 ~xfGrp.set(0.0, \amount, pi/2) // set all in group
 ~xfGrp.set(0.0, \amount, pi/4) // set all in group
 
+/* Encoders */
 ~encoderSynths[0].run
 ~encoderSynths[0].pause
 ~encoderSynths[1].run
@@ -238,6 +284,50 @@ fork {
 ~directorSynths[0].theta_(~dirBussesL[0]).phi_(0.degrad);
 // ~directorSynths[0].theta_(15.degrad).phi_(-10.degrad);
 
+/* Resonators */
+// wet mix
+~resonSynths.do(_.mix_(0)); // 1 = all wet
+~resonSynths.do(_.mix_(1)); // 1 = all wet
+~resonSynths.do(_.mix_(0.5)); // 1 = all wet
+
+// lag time (freqs and amps)
+~resonSynths.do(_.lagtime_(0.05))
+
+( // resonant amps
+var amplo = -40;
+~resonSynths.do{ |synth|
+	synth.amps_(Array.exprand(4, amplo.dbamp, (amplo+8).dbamp).postln);
+};
+)
+( // ring times
+var ring = 0.5;
+~resonSynths.do{ |synth|
+	synth.rings_(4.collect{ring * rrand(0.7, 1.3)})
+}
+)
+( // tuning
+var kind, root, scale, ring;
+// 'major' 'minor' 'harm-minor' 'melo-minor'
+// 'blues' 'blues-major' 'pentatonic' 'chromatic' 'quartertones'
+// tuning tables: 'just' 'fifth' 'pythagorean' 'werckmeister' 'indian' 'arabic'
+// tuned scales: 'just-major' 'just-minor' 'fifth-major' 'fifth-minor'
+kind = 'fifth';
+root = "c6";
+scale = Array.makeScaleMidi( root.notemidi, kind ).midicps;
+~resonSynths.do{ |synth| synth.freqs_(4.collect{scale.choose}) };
+)
+
+/* Reverb */
+(
+~reverbSynth
+.mix_(0.4)
+.predelay_(0.1).cutoff_(800)
+.t60low_(1.0).t60high_(0.8)
+.diffusion_(0.707).diffusionLR_(0.5).diffusionFB_(0.7)
+.mod_(0.3);
+)
+
+~reverbSynth.run
 
 // create dummy busses to simulate movement
 (
