@@ -5,6 +5,7 @@
 */
 
 SerialPort.listDevices
+SerialPort.closeAll
 
 ~orienListener = ArduinoSMS("/dev/tty.usbmodem14201", 57600); // Razor_AHRS    // TODO: confirm baud rate
 ~orienListener.close
@@ -18,17 +19,24 @@ SerialPort.listDevices
 
 ~orienListener.action_({
 	|...args|
-	var ypr;
+	var ypr, y, p, r;
 
 	try{       												// TODO: DEBUG, remove try
+		// args.postln;
 		// unpack data
 		// args: [ "#YPR= ... " ]
-		ypr = msg.drop(5).split($,); // drop "#YPR="
-		ypr.do{ |val| (val++"\n\t").post };
-		"".postln;
+		ypr = args[0].drop(5).split($,); // drop "#YPR="
 
-		~headBus !? { ~headBus.set(ypr) };
-	};
+		y = ypr[0].asFloat;
+		y = (180 - y).wrap(-180, 180); // y.postln;
+
+		p = ypr[1].asFloat; // p.postln;
+
+		r = ypr[2].asFloat;
+		r = (180 - r).wrap(-180, 180).neg; // r.postln;
+
+		~headBus !? { ~headBus.set([y, p, r].raddeg) };
+	} { |err| err.errorString.postln };
 
 })
 )
@@ -48,7 +56,7 @@ SerialPort.listDevices
 // write position to a bus
 s.boot;
 ~vBus = CtkControl(3).play;
-ControlPlotter(~vBus.bus, 3).start; // 3-in-1 scope
+ControlPlotter(~headBus.bus, 3).start; // 3-in-1 scope
 
 
 // individual scopes
