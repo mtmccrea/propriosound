@@ -13,8 +13,12 @@ a.free
 
 ~prev = Main.elapsedTime;
 
-// time message frequency
-a.action_({|msg| var now; /*msg.postln;*/ now = Main.elapsedTime; ~period = now - ~prev; ~prev = now})
+( // time message frequency
+a.action_({|msg| var now; /*msg.postln;*/
+	now = Main.elapsedTime;
+	~period = now - ~prev;
+	~prev = now })
+)
 // post messages
 a.action_({|...args| args.postln })
 a.action_({|...args| args[0].postln })
@@ -23,7 +27,7 @@ a.action_({|msg| msg.postln })
 a.action_({|msg|  })
 
 
-(  /* Razor default */
+(  /* Razor hand position "TAQ" */
 	var p_time=0, p_acc=[0,0,0], p_quat=[0,0,0];
 a.action_({|...args|
 	var data, time, acc, quat;
@@ -59,7 +63,7 @@ a.action_({|...args|
 })
 )
 
-(  /* Razor_AHRS */
+(  /* Razor_AHRS head position "YPR" */
 a.action_({|msg|
 	var ypr = msg.drop(5).split($,); // drop "#YPR="
 	// x = ypr.postln;
