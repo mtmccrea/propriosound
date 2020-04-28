@@ -306,6 +306,14 @@ s.waitForBoot({
 				// overwrite input bus
 				Out.kr(inoutbus, headbus)
 			}),
+
+			// reset signal
+			SynthDef(\resetBell, { |outbus = 0, freq = 450, dur = 0.5, amp = 0.4|
+				var env, sin;
+				env = EnvGen.kr(Env([0,1,0.4,0],[0.01,0.1,0.8], \sin), levelScale: amp, timeScale: dur, doneAction: 2);
+				sin = SinOsc.ar(freq * [1,6,8], mul: [0, -6, -12].dbamp).sum * env * 0.333;
+				Out.ar(outbus, sin!2);
+			}),
 		);
 		s.sync;
 

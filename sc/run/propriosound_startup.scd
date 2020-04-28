@@ -24,6 +24,31 @@ this.executeFile((~projectPath +/+ "sc/run/propriosound_server.scd").fullPath);
 /* STARTUP */
 
 (
+
+var resetDur = 1.5;
+var resetCnt = 3;    // reset position after this many taps (sum of both hands)
+var triggered = false;
+var tapCnt = 0;
+
+~countTap = {
+	tapCnt = tapCnt+1;
+	tapCnt.postln;
+	SystemClock.sched(resetDur, {
+		tapCnt = 0;
+		// "tapCnt reset".postln
+	});
+	if (tapCnt > (resetCnt-1) and: triggered.not) {
+		triggered = true;
+		~synthdefs[\resetBell].note.freq_(700).dur_(0.5).amp_(-12.dbamp).play;
+		~resetPosL = ~resetPosR = true;
+		"TRIGGERED reset".postln;
+		SystemClock.sched(resetDur, {
+			triggered = false;
+		});
+	};
+};
+
+
 // GROUPS
 fork {
 	block { |break|
@@ -116,6 +141,7 @@ fork {
 				~synthdefs[\hwInput].note(addAction: \head, target: ~inGrp)
 				.inbusnum_(inchan) // In.ar(s.options.numOutputBusChannels + inbusnum)
 				.outbus_(~inputBus.index+i)
+				.recoutbus_(2+i) // channel to record to
 				.amp_(1.0)
 			}
 		};
