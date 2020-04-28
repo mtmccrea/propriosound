@@ -21,7 +21,7 @@ this.executeFile((~projectPath +/+ "sc/run/propriosound_server.scd").fullPath);
 ~synthdefs.synthdefs.collect(_.name).postlns;
 
 
-/* RUNTIME - STARTUP */
+/* STARTUP */
 
 (
 // GROUPS
@@ -261,16 +261,11 @@ fork {
 } // end RUNTIME fork
 )
 
-/* RUNTIME - PROCESS */
+/* RUNTIME - basic process */
 
 /* master output */
 ~decoderSynth.amp_(-6.dbamp)
 ~decoderSynth.limit_(-1.5.dbamp) // limiter
-
-/* groups */
-~inGrp.set(0.0, \amp, 0.2)     // set all in group
-~xfGrp.set(0.0, \amount, pi/2) // set all in group
-~xfGrp.set(0.0, \amount, pi/4) // set all in group
 
 /* Encoders */
 ~encoderSynths[0].run
