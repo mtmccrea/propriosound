@@ -1,3 +1,6 @@
+// resource directories
+Platform.userExtensionDir
+
 // list available devices
 ServerOptions.devices.do(_.postln)
 
@@ -9,7 +12,7 @@ s.options.outDevice = "MacBook Pro Speakers";
 
 // set the number of hardware input and output channels you want
 // supercollider to access:
-s.options.numOutputBusChannels_(2); // default is 2 in/out
+s.options.numOutputBusChannels_(6); // set to num record channels
 s.options.numInputBusChannels_(2);
 
 // after the above server options are set, boot the server
@@ -43,5 +46,4 @@ x = {
 )
 
 x.free; // stop the panning noise
-
 
