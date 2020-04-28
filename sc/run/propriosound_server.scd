@@ -70,10 +70,11 @@ s.waitForBoot({
 
 			/* input */
 
-			SynthDef(\hwInput, { |inbusnum = 0, outbus = 0, amp = 1.0|
+			SynthDef(\hwInput, { |inbusnum = 0, outbus = 0, recoutbus = 2 amp = 1.0|
 				var sig;
 				sig = In.ar(s.options.numOutputBusChannels + inbusnum);
-				Out.ar(outbus, sig * amp)
+				Out.ar(outbus, sig * amp);
+				Out.ar(recoutbus, sig * amp);
 			}),
 
 			SynthDef(\sfPlayback, { |outbus = 0, bufnum, amp = 1.0, t_reset = 1|
