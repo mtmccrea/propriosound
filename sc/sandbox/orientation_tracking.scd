@@ -7,7 +7,7 @@
 SerialPort.listDevices
 SerialPort.closeAll
 
-~orienListener = ArduinoSMS("/dev/tty.usbmodem14101", 57600); // Razor_AHRS    // TODO: confirm baud rate
+~orienListener = ArduinoSMS("/dev/tty.usbmodem2101", 57600); // Razor_AHRS    // TODO: confirm baud rate
 ~orienListener.close
 
 
@@ -22,7 +22,7 @@ SerialPort.closeAll
 	var ypr, y, p, r;
 
 	try{       												// TODO: DEBUG, remove try
-		args.postln;
+		// args.postln;
 		// unpack data
 		// args: [ "#YPR= ... " ]
 		ypr = args[0].drop(5).split($,); // drop "#YPR="
@@ -35,8 +35,14 @@ SerialPort.closeAll
 		r = ypr[2].asFloat;
 		r = (180 - r).wrap(-180, 180).neg; // r.postln;
 
-		~headBus !? { ~headBus.set([y, p, r].raddeg) };
-	} { |err| err.errorString.postln };
+		~headBus !? { ~headBus.set([y, p, r].degrad) };
+
+		// for demo visualization
+		~rot !? { ~rot = y.degrad - (0.36pi) };
+		~tilt  !? { ~tilt = p.degrad };
+		~tum  !? { ~tum = r.degrad };
+
+	} { |err| "~orienListener problem".warn };
 
 })
 )

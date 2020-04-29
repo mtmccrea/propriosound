@@ -55,6 +55,10 @@ scale = Array.makeScaleMidi( root.notemidi, kind ).midicps;
 ~resonSynths.do{ |synth| synth.freqs_(4.collect{scale.choose}) };
 )
 
+// soundfiles
+~inSynths.do({ |synth| synth.bufnum = ~testBuffers.scramble[0] });
+
+
 /* Reverb */
 (
 ~reverbSynth
@@ -121,6 +125,11 @@ ControlPlotter(~dirBusR.bus, 3).start
 // encode input in specific directions
 ~directorSynths[0].theta_(45.degrad).phi_(70.degrad)
 ~directorSynths[1].theta_(-15.degrad).phi_(-45.degrad)
+
+( // clip movement range
+~positionSynths[0].clipLoTheta_(-5.degrad).clipHiTheta_(50.degrad);
+~positionSynths[1].clipLoPhi_(-50.degrad).clipHiPhi_(5.degrad);
+)
 
 
 ~encoderSynths.do(_.pause)

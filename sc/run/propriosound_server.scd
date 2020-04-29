@@ -290,8 +290,8 @@ s.waitForBoot({
 				cartesianSq = cartesian.squared;
 
 				// to spherical
-				theta = atan2(y, x).clip(clipLoTheta, clipHiTheta);
-				phi = atan2(z, cartesianSq[0..1].sum.sqrt).clip(clipLoPhi, clipHiPhi);
+				theta = atan2(y, x).fold(clipLoTheta, clipHiTheta);
+				phi = atan2(z, cartesianSq[0..1].sum.sqrt).fold(clipLoPhi, clipHiPhi);
 				rho = cartesianSq.sum.sqrt;
 
 				Out.kr(outbus, [theta, phi, rho])

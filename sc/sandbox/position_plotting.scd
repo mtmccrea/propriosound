@@ -36,15 +36,16 @@
 		[0,1,2,3,0], [4,5,6,7,4],
 		[0,4], [1,5], [3,7], [2,6]
 	]);
-	~pv.front
+	~pv.front;
+	{ ~pv.bounds = Rect(62.0, 45.0, 358.0, 305.0) }.defer(0.5)
 }.defer(0.3);
 
 ) // END load PointView
 
 // Update hand positions in PointView
 (
-~rate = 10;
-~updateVis !? {~updateVis.stop};
+~rate = 8;
+~updateVis !? { ~updateVis.stop };
 ~updateVis = fork({
 	var pospnts = [0,0,0].asCartesian ! ~historyLength ! 2;
 	var clippospnts = [0,0,0].asCartesian ! ~historyLength ! 2;

@@ -11,9 +11,8 @@ SerialPort.listDevices
 
 SerialPort.closeAll;
 
-~posListenerL = ArduinoSMS("/dev/tty.usbmodem14201", 9600); // Razor position firmware default
-// ~posListenerR = ArduinoSMS("/dev/tty.usbmodem14201", 9600); // Razor position firmware default
-
+~posListenerL = ArduinoSMS("/dev/tty.usbmodem14401", 9600); // Razor position firmware default
+~posListenerR = ArduinoSMS("/dev/tty.usbmodem14201", 9600); // Razor position firmware default
 
 ~posListenerL.close
 ~posListenerR.close
@@ -24,7 +23,7 @@ SerialPort.closeAll
 ~posListenerR.free
 
 /* zero-velocity movement threshold */
-~moveThresh = 0.19;
+~moveThresh = 0.15;
 ~postAccMag = true;		// post acceleration magnitude to set ~moveThresh
 ~postAccMag = false;
 ~postEvery = 25;		// post acceleration data every N messages
@@ -46,9 +45,16 @@ var qConj, qProd, qRotate, axisAngle2q, calcPos;
 var ned2enuQuat, xyRot45Quat;
 var moveCnt = 0;
 
+// for tap reset
+// var resetDur = 1.5;
+// var resetCnt = 4;    // reset position after this many taps (sum of both hands)
+// var triggered = false;
+// var tapCnt = 0;
+
+
 ~moveThresh = ~moveThresh ?? 0.15;    // ensure these vars are initialized
 ~postAccMag = ~postAccMag ?? false;
-~postEvery = ~postEvery ?? 25;
+~postEvery = ~postEvery ?? 50;
 ~postMoveEvery = ~postMoveEvery ?? 3;
 
 /* quaternion functions */
@@ -123,7 +129,7 @@ calcPos = { |acc_imu, quat_imu, pos_prev = ([0,0,0]), vel_prev = ([0,0,0]), time
 	};
 
 	// post useful values
-	if (moveCnt == 0) {
+	if (~postAccMag and: {moveCnt == 0}) {
 		"\n% %\n".postf(
 			// acc_world, accmag
 			pos * 981, // conver to cm
@@ -148,6 +154,29 @@ calcPos = { |acc_imu, quat_imu, pos_prev = ([0,0,0]), vel_prev = ([0,0,0]), time
 	[pos, vel, acc_world]	// return
 };
 
+~tapCnt = 0;
+~triggered = false;
+~resetCnt = 4;
+~countTap = {
+	~tapCnt = ~tapCnt+1;
+	~tapCnt.postln;
+	SystemClock.sched(2, {
+		~tapCnt = 0;
+		// "tapCnt reset".postln
+	});
+	if (~tapCnt > (~resetCnt-1) and: {~triggered.not}) {
+		~triggered = true;
+		~synthdefs !? {
+			~synthdefs[\resetBell].note.freq_(700).dur_(0.5).amp_(-12.dbamp).play;
+		};
+		~resetPosL = ~resetPosR = true;
+		"TRIGGERED reset".postln;
+		SystemClock.sched(1.5, {
+			~triggered = false;
+		});
+	};
+};
+
 // id: L = 0, R = 1
 ~genListenerFunc = { |id|
 	/* Razor default "#TAQ=" Time, Acceleration, Quaternions */
@@ -164,11 +193,15 @@ calcPos = { |acc_imu, quat_imu, pos_prev = ([0,0,0]), vel_prev = ([0,0,0]), time
 		var pos, vel, acc_world, elapsedTime;
 
 		try{       												// TODO: DEBUG, remove try
-			var key = args.keep(5);
+			var key = args[0].keep(5);
 			if (key == "#TAP=") { // TAP
-				data = msg.drop(5).split($,).asFloat; // drop "#TAP="
+				62.postln;
+				data = args[0].drop(5).split($,).asFloat; // drop "#TAP="
+				62.postln;
 				postf("TAP\t%\n", data.asFloat);
-				~countTap.()
+				63.postln;
+				// ~countTap !? {~countTap.()};
+				64.postln;
 			} { // Orientation: "#TAQ="
 				// args: [ "#TAQ=time,acc1,acc2,acc3,quat1,quat2,quat3,quat4" ]
 				data = args[0].drop(5).split($,).asFloat; // drop "#TAQ="
@@ -215,6 +248,9 @@ calcPos = { |acc_imu, quat_imu, pos_prev = ([0,0,0]), vel_prev = ([0,0,0]), time
 				);
 				time_prev = time;
 			}
+		} { |err|
+			"msg prob.".warn;
+			~posListenerL !? {~posListenerL.action_({})};
 		};
 	};
 	listenerFunc // return the function
@@ -247,7 +283,7 @@ calcPos = { |acc_imu, quat_imu, pos_prev = ([0,0,0]), vel_prev = ([0,0,0]), time
 /* one-liners for quick tweaks */
 ~posListenerL.action_({});  // disable left serial responder
 ~posListenerR.action_({});  // disable right serial responder
-~resetPos = true;			// reset positions
+~resetPosL = ~resetPosL = true;			// reset positions
 
 
 ~moveThresh = 0.15;
@@ -331,7 +367,10 @@ maxStoreFrames = 2000; // duration ~ nfrm * 10 / 1000
 		if (storeCnt < maxStoreFrames) { // stop counting after writing full buffer
 			storeCnt = storeCnt+1;
 		};
-	} { |error| ~posListenerL.action_({}); error.reportError };
+	} { |error|
+		~posListenerL.action_({});
+		error.reportError
+	};
 
 })
 )
