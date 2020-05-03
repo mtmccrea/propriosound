@@ -13,7 +13,7 @@
 ;
 
 // use soundfiles for test input?
-~useTestInput = true;
+~useTestInput = false;
 // choose which soundfiles to test with as input
 ~testfileIdxs = \rand; // [0,2]
 
@@ -42,9 +42,10 @@
 s = Server.default;
 o = s.options;
 o.numInputBusChannels = 2;
-o.numOutputBusChannels = 2;
+o.numOutputBusChannels = 6;
 o.hardwareBufferSize = 512;
-o.sampleRate = 44100;
+o.sampleRate = 48000;
+o.outDevice_("ScarAndZoom");
 // o.device = "";
 
 "Available hardward devices:".postln;

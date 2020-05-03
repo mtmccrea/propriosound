@@ -7,23 +7,18 @@
 ~projectPath = PathName(
 	"/Users/dyne/Documents/Courses/Emergent User interfaces/"
 );
+[
+	"sc/functions/position_calc_func",     // calc funcs before listener
+	"sc/functions/position_listener_func",
+	"sc/functions/position_viz_func",
+	"sc/run/propriosound_settings", 		// settings before server
+	"sc/run/propriosound_server",
+].do({ |name| this.executeFile((~projectPath +/+ format("%.scd", name)).fullPath) });
 
-// load settings
-this.executeFile((~projectPath +/+ "sc/run/propriosound_settings.scd").fullPath);
-
-// load synths
-this.executeFile((~projectPath +/+ "sc/run/propriosound_server.scd").fullPath);
 )
-
-/* UTILS */
-
-// inspect available synthdefs
-~synthdefs.synthdefs.collect(_.name).postlns;
-
 
 /* STARTUP */
 (
-
 
 // GROUPS
 fork {
@@ -117,17 +112,13 @@ fork {
 				~synthdefs[\hwInput].note(addAction: \head, target: ~inGrp)
 				.inbusnum_(inchan) // In.ar(s.options.numOutputBusChannels + inbusnum)
 				.outbus_(~inputBus.index+i)
-				.recoutbus_(2+i) // channel to record to
+				// .recoutbus_(2+i) // channel to record to
 				.amp_(1.0)
 			}
 		};
 		logProgress.("Input synths created");
 
-		// ~compandSynths = 2.collect{
-		// 	GatedCompander(
-		// 		~inputBus.index+i, ~inputBus.index+i, \tail, target: ~inGrp
-		// 	);
-		// };
+		// Compander could go here...
 		// logProgress.("Compander synths created");
 
 		// ~~~ RESONATOR SYNTHS ~~~
@@ -140,7 +131,7 @@ fork {
 			.freqs_([300, 600, 900, 1200])
 			.amps_([ 0.0164, 0.0112, 0.0152, 0.0158])
 			.rings_([1, 2, 1, 1.2])
-			.lagtime_(1.3)
+			.lagtime_(0.1)
 			;
 		};
 		logProgress.("Input processing synths created");
@@ -169,7 +160,7 @@ fork {
 		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 		// position to direction control bus encoders
-		dirclipTheta = [[-15, 85], [-85, 15]].degrad; // [[leftLo, leftHi], [rightLo, rightHi]]
+		dirclipTheta = [[15, 85], [-85, -15]].degrad; // [[leftLo, leftHi], [rightLo, rightHi]]
 		~positionSynths = [
 			[~posBusL, ~dirBusL],
 			[~posBusR, ~dirBusR]
@@ -232,6 +223,7 @@ fork {
 		~decoderSynth = ~synthdefs[\decoder].note(addAction: \tail, target: ~decGrp)
 		.inbus_(~decBus)
 		.outbus_(~hwOutChan)
+		.recout_(~hwOutChan+4)
 		.limit_(-1.5.dbamp) // limiter
 		.amp_(1.0)
 		;
@@ -270,58 +262,92 @@ fork {
 } // end RUNTIME fork
 )
 
+// /* SERIAL LISTENER SETUP */ 									/* SERIAL LISTENER SETUP */
+SerialPort.listDevices
+SerialPort.closeAll // clean up Serial
+
+~posListenerL.close;
+~posListenerR.close;
+~orienListener.close;
+
+~posListenerL = ArduinoSMS("/dev/tty.usbmodem14401", 9600); // Razor position firmware default
+// ~posListenerR = ArduinoSMS("/dev/tty.usbmodem14301", 9600); // Razor position firmware default
+~orienListener = ArduinoSMS("/dev/tty.usbmodem101", 57600); // Razor_AHRS    // TODO: confirm baud rate
+
+
+// test: write position to a bus
+/* initialize position serial listener actions */
+~posListenerL.action_(~genListenerFunc.(id: 0)) // left, id: 0
+// ~posListenerR.action_(~genListenerFunc.(id: 1)) // left, id: 0
+
+~resetPosL = ~resetPosR = true;	// reset positions
+~setMoveThresh.(0.05);  // zero-velocity movement threshold
+~posBusR.set([20,-50,70])
+
 /* RUNTIME - basic process */
 
+( /* POSITION CONTROL */									/* POSITION CONTROL */
+// ~dirBussesL/R theta, phi, rho
+~directorSynths[0].theta_(~dirBussesL[0]).phi_(~dirBussesL[1]).rho_(~dirBussesL[2]);
+~directorSynths[1].theta_(~dirBussesR[0]).phi_(~dirBussesR[1]).rho_(~dirBussesR[2]);
+)
+
 /* master output */
-~decoderSynth.amp_(-6.dbamp)
+~decoderSynth.amp_(6.dbamp)
 ~decoderSynth.limit_(-1.5.dbamp) // limiter
 
-/* Encoders */
-~encoderSynths[0].run
-~encoderSynths[0].pause
-~encoderSynths[1].run
-~encoderSynths[1].pause
-
-~directorSynths[0].theta_(~dirBussesL[0]).phi_(~dirBussesL[1]).rho_(~dirBussesL[2]);
-~directorSynths[0].theta_(~dirBussesL[0]).phi_(~dirBussesL[1]);
-~directorSynths[0].theta_(45.degrad).phi_(~dirBussesL[1]);
-~directorSynths[0].theta_(~dirBussesL[0]).phi_(0.degrad);
-// ~directorSynths[0].theta_(15.degrad).phi_(-10.degrad);
-
-/* Resonators */
-// wet mix
+//  /* RESONATORS */                                           /* RESONATORS */
+// Wet/Dry mix
 ~resonSynths.do(_.mix_(0)); // 1 = all wet
 ~resonSynths.do(_.mix_(1)); // 1 = all wet
-~resonSynths.do(_.mix_(0.5)); // 1 = all wet
+~resonSynths.do(_.mix_(0.2));
 
-// lag time (freqs and amps)
-~resonSynths.do(_.lagtime_(0.05))
-
-( // resonant amps
+( // amps
 var amplo = -40;
 ~resonSynths.do{ |synth|
 	synth.amps_(Array.exprand(4, amplo.dbamp, (amplo+8).dbamp).postln);
 };
 )
 ( // ring times
-var ring = 0.5;
+var ring = 1.6;
 ~resonSynths.do{ |synth|
 	synth.rings_(4.collect{ring * rrand(0.7, 1.3)})
 }
 )
-( // tuning
-var kind, root, scale, ring;
-// 'major' 'minor' 'harm-minor' 'melo-minor'
-// 'blues' 'blues-major' 'pentatonic' 'chromatic' 'quartertones'
-// tuning tables: 'just' 'fifth' 'pythagorean' 'werckmeister' 'indian' 'arabic'
-// tuned scales: 'just-major' 'just-minor' 'fifth-major' 'fifth-minor'
-kind = 'fifth';
-root = "c6";
-scale = Array.makeScaleMidi( root.notemidi, kind ).midicps;
-~resonSynths.do{ |synth| synth.freqs_(4.collect{scale.choose}) };
-)
 
-/* Reverb */
+~resonSynths.do{ |synth| synth.lagtime_(0.01) }
+~resonSynths.do{ |synth| synth.mix_(1) }
+
+(
+var amplo, amphi, waitMul;
+amplo = -40;
+amphi = -34;
+waitMul = 3.2;
+~tuningFork !? { ~tuningFork.stop; ~tuningFork=nil; };
+~tuningFork = fork {
+	inf.do{
+		var kind, root, scale, ring;
+		// 'major' 'minor' 'harm-minor' 'melo-minor'
+		// 'blues' 'blues-major' 'pentatonic' 'chromatic' 'quartertones'
+		// tuning tables: 'just' 'fifth' 'pythagorean' 'werckmeister' 'indian' 'arabic'
+		// tuned scales: 'just-major' 'just-minor' 'fifth-major' 'fifth-minor'
+		kind = 'just-major';
+		root = "c5";
+		scale = Array.makeScaleMidi( root.notemidi, kind ).midicps;
+
+		~resonSynths.do{ |synth|
+			synth.freqs_(4.collect{scale.choose});
+			Array.exprand(4, amplo.dbamp, amphi.dbamp).reverse;
+		};
+
+		(rrand(0.5, 0.1)* waitMul).wait;
+	}
+};
+)
+~tuningFork.stop;
+
+
+//   /* REVERB */                                                /* REVERB */
 (
 ~reverbSynth
 .mix_(0.4)
@@ -332,6 +358,8 @@ scale = Array.makeScaleMidi( root.notemidi, kind ).midicps;
 )
 
 ~reverbSynth.run
+
+
 
 // create dummy busses to simulate movement
 (
@@ -346,12 +374,21 @@ scale = Array.makeScaleMidi( root.notemidi, kind ).midicps;
 ~directorSynths[0].theta_(~azOscL).phi_(~elOscL);
 ~directorSynths[1].theta_(~azOscR).phi_(~elOscR);
 )
-( // actual direction busses
-// ~dirBussesL/R theta, phi, rho
-~directorSynths[0].theta_(~dirBussesL[0]).phi_(~dirBussesL[1]).rho_(~dirBussesL[2]);
-~directorSynths[1].theta_(~dirBussesR[0]).phi_(~dirBussesR[1]).rho_(~dirBussesR[2]);
-)
 
+/* Encoders */
+~encoderSynths[0].run
+~encoderSynths[0].pause
+~encoderSynths[1].run
+~encoderSynths[1].pause
+
+~directorSynths[0].theta_(~dirBussesL[0]).phi_(~dirBussesL[1]).rho_(~dirBussesL[2]);
+~directorSynths[0].theta_(~dirBussesL[0]).phi_(~dirBussesL[1]);
+~directorSynths[0].theta_(45.degrad).phi_(~dirBussesL[1]);
+~directorSynths[0].theta_(~dirBussesL[0]).phi_(0.degrad);
+// ~directorSynths[0].theta_(15.degrad).phi_(-10.degrad);
+
+
+//   /* VISUALIZE */                                                /* VISUALIZE */
 // visualize
 ControlPlotter(~azOscL.bus, 1).start
 
@@ -395,6 +432,8 @@ ControlPlotter(~dirBusR.bus, 3).start
 ~directorSynths
 ~decoderSynth
 
+// inspect available synthdefs
+~synthdefs.synthdefs.collect(_.name).postlns;
 
 /* CLEANUP */
 // To restart synths/processes
@@ -410,3 +449,5 @@ ControlPlotter(~dirBusR.bus, 3).start
 ~decoderKernel.free;
 ~encoderKernels.do(_.free);
 )
+
+

@@ -38,7 +38,8 @@ SerialPort.closeAll
 		~headBus !? { ~headBus.set([y, p, r].degrad) };
 
 		// for demo visualization
-		~rot !? { ~rot = y.degrad - (0.36pi) };
+		~rot !? { ~rot = y.degrad - (0.2pi) };
+		// ~rot !? { ~rot = y.degrad };
 		~tilt  !? { ~tilt = p.degrad };
 		~tum  !? { ~tum = r.degrad };
 

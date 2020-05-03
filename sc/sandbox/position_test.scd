@@ -35,7 +35,7 @@ s.waitForBoot({
 
 	~posSynthL = ~synthdefs[\pos2dir].note(addAction: \tail, target: ~inGrp)
 	.inbus_(~posBusL).outbus_(~dirBusL)
-	.clipLoTheta_(-15.degrad).clipHiTheta_(85.degrad) // clip the direction
+	.clipLoTheta_(15.degrad).clipHiTheta_(85.degrad) // clip the direction
 	.clipLoPhi_(-45.degrad).clipHiPhi_(45.degrad)
 	.play;
 	~posSynthR = ~synthdefs[\pos2dir].note(addAction: \tail, target: ~inGrp)
@@ -59,11 +59,11 @@ s.waitForBoot({
 
 SerialPort.listDevices
 SerialPort.closeAll // clean up Serial
+[~posListenerL, ~posListenerR].do{|me| me !? {me.close} };
 
 ~posListenerL = ArduinoSMS("/dev/tty.usbmodem14401", 9600); // Razor position firmware default
 ~posListenerR = ArduinoSMS("/dev/tty.usbmodem14301", 9600); // Razor position firmware default
 
-[~posListenerL, ~posListenerR].do{|me| me !? {me.close} };
 
 // test: write position to a bus
 /* initialize position serial listener actions */
@@ -81,14 +81,13 @@ SerialPort.closeAll // clean up Serial
 ~postAccMag = false;
 
 ~resetPosL = ~resetPosR = true;	// reset positions
-
 ~setMoveThresh.(0.03);  // zero-velocity movement threshold
 
 ~moveMeter.spec_([0,1,3].asSpec)
 c = ControlSpec(warp: -6)
 c.map(0.3)
 
-~posBusL.set([30,40,45])
+~posBusR.set([15,-50,-10])
 
 
 /* quick resets */
@@ -102,12 +101,9 @@ c.map(0.3)
 // scope the control bus
 // visualize in cube
 
-
-
 ~positionSynths[0].clipLoTheta_(20.degrad).clipHiTheta_(25.degrad)
 ~positionSynths[1].clipLoTheta_(-25.degrad).clipHiTheta_(20.degrad)
 ~positionSynths[0..1].do({|synth| synth.clipLoPhi_(-45.degrad).clipHiPhi_(45.degrad) })
-
 
 
 // individual scopes
@@ -130,8 +126,6 @@ c.map(0.3)
 
 
 
-
-
 /* Debug: standalone serial listener, position data recording */
 
 ( // write logged data to a test file:
@@ -146,6 +140,53 @@ accdata.shape;
 p = accdata.flop.plot
 )
 ~dataStore.size
+
+/* resonance tuning */
+(
+var amplo = -4, amphi = -9;
+x.amps_(Array.exprand(4, amplo.dbamp, amphi.dbamp).postln);
+y.amps_(Array.exprand(4, amplo.dbamp, amphi.dbamp).postln);
+)
+
+(
+var ring = 1.8;
+~resonSynths.do{ |synth|
+	synth.rings_(4.collect{ring * rrand(0.7, 1.3)});
+}
+)
+
+~resonSynths.do{ |synth| synth.lagtime_(0.01) }
+~resonSynths.do{ |synth| synth.mix_(0.8) }
+
+
+(
+var amplo, amphi, waitMul;
+amplo = -40;
+amphi = -34;
+waitMul = 4.2;
+~tuningFork !? { ~tuningFork.stop; ~tuningFork=nil; };
+~tuningFork = fork {
+	inf.do{
+		var kind, root, scale, ring;
+		// 'major' 'minor' 'harm-minor' 'melo-minor'
+		// 'blues' 'blues-major' 'pentatonic' 'chromatic' 'quartertones'
+		// tuning tables: 'just' 'fifth' 'pythagorean' 'werckmeister' 'indian' 'arabic'
+		// tuned scales: 'just-major' 'just-minor' 'fifth-major' 'fifth-minor'
+		kind = 'fifth-major';
+		root = "c6";
+		scale = Array.makeScaleMidi( root.notemidi, kind ).midicps;
+
+		~resonSynths.do{ |synth|
+			synth.freqs_(4.collect{scale.choose});
+			Array.exprand(4, amplo.dbamp, amphi.dbamp).reverse;
+		};
+
+		(rrand(0.5, 0.1)* waitMul).wait;
+	}
+};
+)
+~tuningFork.stop;
+
 
 
 /* Utils */

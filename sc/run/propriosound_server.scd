@@ -74,7 +74,7 @@ s.waitForBoot({
 				var sig;
 				sig = In.ar(s.options.numOutputBusChannels + inbusnum);
 				Out.ar(outbus, sig * amp);
-				Out.ar(recoutbus, sig * amp);
+				// Out.ar(recoutbus, sig * amp);
 			}),
 
 			SynthDef(\sfPlayback, { |outbus = 0, bufnum, amp = 1.0, t_reset = 1|
@@ -129,7 +129,7 @@ s.waitForBoot({
 			}),
 
 			SynthDef(\resonance, {
-				arg inoutbus, mix = 0.5, lagtime = 1.8,
+				arg inoutbus, mix = 0.5, lagtime = 0.1,
 					freqs (#[300, 600, 900, 1200]),
 					amps (#[1, 0.3, 0.2, 0.05]),
 					rings (#[1, 1, 1, 2]);
@@ -264,13 +264,15 @@ s.waitForBoot({
 
 			/* Decoder */
 
-			SynthDef(\decoder, { arg inbus, outbus = 0, amp = 1, limit = 0.85;
-				var foa, decode;
+			SynthDef(\decoder, { arg inbus, outbus = 0, amp = 1, limit = 0.85, recout =2;
+				var foa, decode, limited;
 				foa = In.ar(inbus, 4); // FOA input
 				decode = FoaDecode.ar(
 					foa, ~decoderKernel, mul: amp // see ~binDecoder in settings
 				);
-				Out.ar(outbus, Limiter.ar(decode, limit))
+				limited = Limiter.ar(decode, limit);
+				Out.ar(outbus, limited);
+				Out.ar(recout, limited);
 			}),
 
 
