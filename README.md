@@ -13,12 +13,15 @@ Other resources that informed the prototype:
 - [Calibration procedure](https://github.com/Razor-AHRS/razor-9dof-ahrs/wiki/Tutorial#sensor-calibration)
 
 System visualization tools from within SuperCollider:
+
 ![System visualization tools from within SuperCollider](rsrc/debug_view.png "Position- and head-tracking development views.")
 
 Hand-tracked EM sensing:
+
 ![Hand-tracked EM sensing](rsrc/EM_flush2.jpg)
 <!-- <img align="left" src="rsrc/EM_flush2.jpg" width=400> -->
 
 Basic system diagram:
+
 ![Basic system diagram](rsrc/system_diagram_vert.png)
 <!-- <img align="left" src="rsrc/system_diagram_vert.png" width=400> -->
